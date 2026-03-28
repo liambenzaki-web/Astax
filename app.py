@@ -52,6 +52,8 @@ def home():
 def generate():
     prompt = request.args.get("prompt", "a beautiful landscape")
     response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
+    print(f"Status: {response.status_code}")
+    print(f"Response: {response.text[:500]}")
     if response.status_code == 200:
         return send_file(io.BytesIO(response.content), mimetype="image/png")
     return jsonify({"error": response.text}), 500

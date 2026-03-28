@@ -3,6 +3,7 @@ import requests
 import os
 from PIL import Image
 import io
+import time
 
 API_TOKEN = os.environ.get("HF_TOKEN")
 API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
@@ -17,9 +18,20 @@ def generer_image(prompt, guidance_scale):
         }
     }
     
-    response = requests.post(API_URL, headers=headers, json=payload)
-    image = Image.open(io.BytesIO(response.content))
-    return image
+    # On réessaie jusqu'à 3 fois si le modèle est en chargement
+    for i in range(3):
+        response = requests.post(API_URL, headers=headers, json=payload)
+        
+        # Si la réponse est une image valide
+        try:
+            image = Image.open(io.BytesIO(response.content))
+            return image
+        except:
+            # Le modèle est en train de se charger, on attend
+            if i < 2:
+                time.sleep(20)
+            else:
+                return None
 
 with gr.Blocks(title="Astax") as app:
     

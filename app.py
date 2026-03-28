@@ -7,7 +7,7 @@ import time
 import json
 
 API_TOKEN = os.environ.get("HF_TOKEN")
-API_URL = "https://api-inference.huggingface.co/models/stabilityai/sdxl-turbo"
+API_URL = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5"
 
 headers = {"Authorization": f"Bearer {API_TOKEN}"}
 

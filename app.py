@@ -7,7 +7,7 @@ from PIL import Image
 app = Flask(__name__)
 
 API_TOKEN = os.environ.get("HF_TOKEN")
-API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
+API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2"
 headers = {"Authorization": f"Bearer {API_TOKEN}"}
 
 @app.route("/")

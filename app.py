@@ -16,7 +16,7 @@ app = gr.Interface(
     fn=generer_image,
     inputs=gr.Textbox(placeholder="a dragon flying over a castle..."),
     outputs=gr.Image(),
-    title="🎨 Astax",
+    title="Astax",
 )
 
 app.launch(server_name="0.0.0.0", server_port=7860)

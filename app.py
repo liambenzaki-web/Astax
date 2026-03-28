@@ -60,4 +60,4 @@ with gr.Blocks(title="Astax") as app:
         outputs=image_sortie
     )
 
-app.launch(server_name="0.0.0.0", server_port=10000)
+app.launch(server_name="0.0.0.0", server_port=7860)

@@ -4,6 +4,7 @@ import os
 from PIL import Image
 import io
 import time
+import json
 
 API_TOKEN = os.environ.get("HF_TOKEN")
 API_URL = "https://api-inference.huggingface.co/models/stabilityai/sdxl-turbo"
@@ -18,20 +19,27 @@ def generer_image(prompt, guidance_scale):
         }
     }
     
-    # On réessaie jusqu'à 3 fois si le modèle est en chargement
-    for i in range(3):
+    for i in range(5):
         response = requests.post(API_URL, headers=headers, json=payload)
         
-        # Si la réponse est une image valide
-        try:
+        # Vérifie si c'est une image
+        if response.headers.get("content-type", "").startswith("image"):
             image = Image.open(io.BytesIO(response.content))
             return image
-        except:
-            # Le modèle est en train de se charger, on attend
-            if i < 2:
-                time.sleep(20)
+        
+        # Sinon on affiche l'erreur et on attend
+        try:
+            error = response.json()
+            print(f"Tentative {i+1}: {error}")
+            if "estimated_time" in error:
+                wait_time = min(error["estimated_time"], 30)
+                time.sleep(wait_time)
             else:
-                return None
+                time.sleep(10)
+        except:
+            time.sleep(10)
+    
+    raise gr.Error("Le modèle n'est pas disponible, réessaie dans quelques minutes.")
 
 with gr.Blocks(title="Astax") as app:
     

@@ -5,7 +5,7 @@ from PIL import Image
 import io
 
 API_TOKEN = os.environ.get("HF_TOKEN")
-API_URL = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5"
+API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
 headers = {"Authorization": f"Bearer {API_TOKEN}"}
 
 def generer_image(prompt):

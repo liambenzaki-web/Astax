@@ -126,7 +126,7 @@ def generate():
         img_bytes.seek(0)
         
         result = client.image_to_image(
-            image=img_bytes,
+           image=img_bytes.read(),
             prompt=prompt,
             strength=strength,
             model="stabilityai/stable-diffusion-xl-refiner-1.0"

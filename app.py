@@ -106,8 +106,19 @@ def home():
                 
                 if (imgResponse.ok) {
                     const blob = await imgResponse.blob();
-                    document.getElementById("generatedImage").src = URL.createObjectURL(blob);
+                    const imgUrl = URL.createObjectURL(blob);
+                    document.getElementById("generatedImage").src = imgUrl;
                     document.getElementById("generatedImage").style.display = "block";
+
+                    const oldBtn = document.getElementById("downloadBtn");
+                    if (oldBtn) oldBtn.remove();
+                    const downloadBtn = document.createElement("a");
+                    downloadBtn.id = "downloadBtn";
+                    downloadBtn.href = imgUrl;
+                    downloadBtn.download = "astax-image.png";
+                    downloadBtn.innerText = "⬇️ Télécharger l'image";
+                    downloadBtn.style = "display:block;margin:10px auto;padding:10px 20px;background:orange;color:black;border-radius:8px;text-decoration:none;font-weight:bold;width:fit-content;";
+                    document.getElementById("messages").appendChild(downloadBtn);
                 }
                 document.getElementById("generating").style.display = "none";
                 conversation = [];
@@ -172,4 +183,3 @@ def generate():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=7860)
-

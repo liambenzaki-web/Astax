@@ -7,7 +7,7 @@ from groq import Groq
 app = Flask(__name__)
 
 HF_TOKEN = os.environ.get("HF_TOKEN")
-GROQ_KEY = os.environ.get("GROQ_KEY")
+GROQ_KEY = os.environ.get("GROQ_API_KEY")
 
 hf_client = InferenceClient(
     provider="hf-inference",

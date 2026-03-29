@@ -129,7 +129,7 @@ def generate():
            image=img_bytes.read(),
             prompt=prompt,
             strength=strength,
-            model="stabilityai/stable-diffusion-xl-refiner-1.0"
+            model="stabilityai/stable-diffusion-xl-base-1.0"
         )
     else:
         # Mode text-to-image — sans image de référence

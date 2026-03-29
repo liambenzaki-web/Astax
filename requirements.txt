@@ -1,3 +1,4 @@
 flask
 huggingface-hub
 Pillow
+anthropic

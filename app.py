@@ -1,14 +1,16 @@
 import os
 import io
-import requests
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, send_file
+from huggingface_hub import InferenceClient
 from PIL import Image
 
 app = Flask(__name__)
 
 API_TOKEN = os.environ.get("HF_TOKEN")
-API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2"
-headers = {"Authorization": f"Bearer {API_TOKEN}"}
+client = InferenceClient(
+    provider="hf-inference",
+    api_key=API_TOKEN
+)
 
 @app.route("/")
 def home():
@@ -51,12 +53,14 @@ def home():
 @app.route("/generate")
 def generate():
     prompt = request.args.get("prompt", "a beautiful landscape")
-    response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
-    print(f"Status: {response.status_code}")
-    print(f"Response: {response.text[:500]}")
-    if response.status_code == 200:
-        return send_file(io.BytesIO(response.content), mimetype="image/png")
-    return jsonify({"error": response.text}), 500
+    image = client.text_to_image(
+        prompt,
+        model="stabilityai/stable-diffusion-xl-base-1.0"
+    )
+    img_io = io.BytesIO()
+    image.save(img_io, format="PNG")
+    img_io.seek(0)
+    return send_file(img_io, mimetype="image/png")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=7860)

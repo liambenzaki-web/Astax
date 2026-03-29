@@ -2,18 +2,18 @@ import os
 import io
 from flask import Flask, request, send_file, jsonify
 from huggingface_hub import InferenceClient
-import anthropic
+from groq import Groq
 
 app = Flask(__name__)
 
 HF_TOKEN = os.environ.get("HF_TOKEN")
-ANTHROPIC_KEY = os.environ.get("ANTHROPIC_KEY")
+GROQ_KEY = os.environ.get("GROQ_KEY")
 
 hf_client = InferenceClient(
     provider="hf-inference",
     api_key=HF_TOKEN
 )
-anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
+groq_client = Groq(api_key=GROQ_KEY)
 
 @app.route("/")
 def home():
@@ -36,7 +36,7 @@ def home():
             button { padding:12px 24px; background:orange; border:none; border-radius:8px; font-size:16px; cursor:pointer; font-weight:bold; }
             button:hover { background:#ff9900; }
             .generating { text-align:center; padding:20px; color:#aaa; display:none; }
-            #generatedImage { max-width:100%; border-radius:12px; margin:20px auto; display:none; }
+            #generatedImage { max-width:100%; border-radius:12px; margin:20px auto; display:block; }
         </style>
     </head>
     <body>
@@ -45,7 +45,7 @@ def home():
         <div class="chat-container">
             <div class="messages" id="messages"></div>
             <div class="generating" id="generating">⏳ Génération de l'image en cours...</div>
-            <img id="generatedImage">
+            <img id="generatedImage" style="display:none">
         </div>
         
         <div class="input-area">
@@ -58,7 +58,6 @@ def home():
         <script>
         let conversation = [];
         
-        // Message de bienvenue
         window.onload = function() {
             ajouterMessage("bot", "Bonjour ! 👋 Je suis ton assistant créatif. Dis-moi ce que tu veux créer comme image, et je vais te poser quelques questions pour obtenir le meilleur résultat possible !");
         }
@@ -111,8 +110,6 @@ def home():
                     document.getElementById("generatedImage").style.display = "block";
                 }
                 document.getElementById("generating").style.display = "none";
-                
-                // Reset conversation pour une nouvelle image
                 conversation = [];
             }
         }
@@ -127,35 +124,28 @@ def chat():
     messages = data.get("messages", [])
     
     system = """Tu es un assistant créatif qui aide les utilisateurs à créer des images avec une IA.
-    
+
 Ton rôle est de poser des questions précises pour affiner leur idée, puis générer un prompt en anglais pour l'IA.
 
 Règles :
-- Pose UNE seule question à la fois
+- Pose UNE seule question à la fois en français
 - Maximum 3-4 questions avant de générer
-- Quand tu as assez d'informations, réponds avec ce format exact:
+- Quand tu as assez d'informations, réponds avec ce format exact sur deux lignes séparées:
   GENERATE: [prompt en anglais très détaillé]
-  MESSAGE: [message sympa en français pour annoncer la génération]
+  MESSAGE: [message sympa en français pour annoncer la génération]"""
 
-Exemples de questions à poser:
-- Quel style ? (réaliste, anime, peinture, cyberpunk...)
-- Quelle ambiance ? (jour, nuit, sombre, joyeux...)
-- Des personnages ? Des détails particuliers ?
-- Quelle époque ? (futuriste, médiéval, moderne...)"""
-
-    response = anthropic_client.messages.create(
-        model="claude-sonnet-4-20250514",
+    response = groq_client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
         max_tokens=500,
-        system=system,
-        messages=messages
+        messages=[{"role": "system", "content": system}] + messages
     )
     
-    text = response.content[0].text
+    text = response.choices[0].message.content
     
     if "GENERATE:" in text:
         lines = text.split("\n")
         prompt = ""
-        message = ""
+        message = "Parfait, je génère ton image ! ✨"
         for line in lines:
             if line.startswith("GENERATE:"):
                 prompt = line.replace("GENERATE:", "").strip()
@@ -178,8 +168,4 @@ def generate():
     img_io = io.BytesIO()
     result.save(img_io, format="PNG")
     img_io.seek(0)
-    return send_file(img_io, mimetype="image/png")
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=7860)
-
+    return

@@ -1017,4 +1017,195 @@ function openAuthModal() {
     document.getElementById('authTitle').innerText = 'Connexion';
     document.getElementById('authActionBtn').innerText = 'Se connecter';
     document.getElementById('authSwitchText').innerText = 'Pas de compte ?';
-    document.getElementById('authSwitchLink').i
+    document.getElementById('authSwitchLink').innerText = "S'inscrire";
+    document.getElementById('authError').style.display = 'none';
+    document.getElementById('authOverlay').classList.add('active');
+    document.getElementById('authUsername').focus();
+}
+
+function toggleAuthMode() {
+    authMode = authMode === 'login' ? 'register' : 'login';
+    const isLogin = authMode === 'login';
+    document.getElementById('authTitle').innerText = isLogin ? 'Connexion' : 'Inscription';
+    document.getElementById('authActionBtn').innerText = isLogin ? 'Se connecter' : "S'inscrire";
+    document.getElementById('authSwitchText').innerText = isLogin ? 'Pas de compte ?' : 'Déjà un compte ?';
+    document.getElementById('authSwitchLink').innerText = isLogin ? "S'inscrire" : 'Se connecter';
+    document.getElementById('authError').style.display = 'none';
+}
+
+async function authAction() {
+    const username = document.getElementById('authUsername').value.trim();
+    const password = document.getElementById('authPassword').value;
+    if (!username || !password) return;
+    const endpoint = authMode === 'login' ? '/login' : '/register';
+    const res = await fetch(endpoint, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username, password})});
+    const data = await res.json();
+    if (data.success) {
+        setLoggedIn(username);
+        if (data.prompt_history) promptHistory = data.prompt_history;
+        closeOverlay('authOverlay');
+        document.getElementById('authUsername').value = '';
+        document.getElementById('authPassword').value = '';
+        addMessage('bot', authMode === 'login' ? `✅ Bon retour ${username} !` : `🎉 Bienvenue ${username} !`);
+    } else {
+        const err = document.getElementById('authError');
+        err.innerText = data.error;
+        err.style.display = 'block';
+    }
+}
+
+function setLoggedIn(username) {
+    currentUser = username;
+    document.getElementById('userAvatar').innerText = username[0].toUpperCase();
+    document.getElementById('userName').innerText = username;
+    document.getElementById('userStatus').innerText = 'Compte connecté ✓';
+    document.getElementById('userCard').onclick = logout;
+}
+
+async function logout() {
+    await fetch('/logout', {method:'POST'});
+    currentUser = null;
+    document.getElementById('userAvatar').innerText = '?';
+    document.getElementById('userName').innerText = 'Mode invité';
+    document.getElementById('userStatus').innerText = 'Se connecter →';
+    document.getElementById('userCard').onclick = openAuthModal;
+    promptHistory = JSON.parse(localStorage.getItem('astax_history') || '[]');
+    addMessage('bot', 'Tu es maintenant déconnecté. À bientôt ! 👋');
+}
+</script>
+</body>
+</html>
+"""
+
+@app.route("/chat", methods=["POST"])
+def chat():
+    data = request.json
+    messages = data.get("messages", [])
+    style = data.get("style", "")
+    style_hint = f" Le style visuel choisi par l'utilisateur est : {style}." if style else ""
+
+    system = f"""Tu es un assistant créatif qui aide les utilisateurs à créer des images avec une IA générative.{style_hint}
+
+Pose des questions précises en français pour affiner l'idée, puis génère un prompt détaillé en anglais.
+
+Règles :
+- UNE seule question à la fois
+- Maximum 3-4 questions
+- Avant de générer, demande : "Combien d'images souhaitez-vous ? (1 à 5)"
+- Quand tu as tout, réponds EXACTEMENT ainsi :
+  GENERATE: [prompt anglais très détaillé incluant le style si précisé]
+  COUNT: [1-5]
+  MESSAGE: [courte annonce en français]"""
+
+    response = groq_client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        max_tokens=500,
+        messages=[{"role": "system", "content": system}] + messages
+    )
+    text = response.choices[0].message.content
+
+    if "GENERATE:" in text:
+        lines = text.split("\n")
+        prompt, count, message = "", 1, "Génération en cours ✨"
+        for line in lines:
+            if line.startswith("GENERATE:"): prompt = line.replace("GENERATE:", "").strip()
+            elif line.startswith("COUNT:"):
+                try: count = max(1, min(5, int(line.replace("COUNT:", "").strip())))
+                except: count = 1
+            elif line.startswith("MESSAGE:"): message = line.replace("MESSAGE:", "").strip()
+        return jsonify({"type": "generate", "prompt": prompt, "count": count, "message": message})
+    return jsonify({"type": "question", "message": text})
+
+@app.route("/generate", methods=["POST"])
+def generate():
+    data = request.json
+    prompt = data.get("prompt", "a beautiful landscape")
+    negative_prompt = data.get("negative_prompt", "")
+    style = data.get("style", "")
+    full_prompt = f"{prompt}, {style}" if style else prompt
+
+    result = hf_client.text_to_image(
+        full_prompt,
+        model="stabilityai/stable-diffusion-xl-base-1.0",
+        negative_prompt=negative_prompt or None
+    )
+    img_io = io.BytesIO()
+    result.save(img_io, format="PNG")
+    img_io.seek(0)
+    return send_file(img_io, mimetype="image/png")
+
+@app.route("/me")
+def me():
+    username = session.get("username")
+    if username and username in users:
+        return jsonify({"username": username, "prompt_history": users[username].get("prompt_history", [])})
+    return jsonify({"username": None})
+
+@app.route("/register", methods=["POST"])
+def register():
+    data = request.json
+    username, password = data.get("username", "").strip(), data.get("password", "")
+    if not username or not password: return jsonify({"success": False, "error": "Remplis tous les champs."})
+    if len(password) < 6: return jsonify({"success": False, "error": "Mot de passe trop court (6 caractères min)."})
+    if username in users: return jsonify({"success": False, "error": "Nom d'utilisateur déjà pris."})
+    users[username] = {"password_hash": hash_password(password), "galleries": {}, "prompt_history": []}
+    session["username"] = username
+    return jsonify({"success": True})
+
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.json
+    username, password = data.get("username", "").strip(), data.get("password", "")
+    if username not in users: return jsonify({"success": False, "error": "Utilisateur introuvable."})
+    if users[username]["password_hash"] != hash_password(password): return jsonify({"success": False, "error": "Mot de passe incorrect."})
+    session["username"] = username
+    return jsonify({"success": True, "prompt_history": users[username].get("prompt_history", [])})
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.pop("username", None)
+    return jsonify({"success": True})
+
+@app.route("/galleries")
+def get_galleries():
+    username = session.get("username")
+    if username and username in users: return jsonify(users[username]["galleries"])
+    return jsonify({})
+
+@app.route("/create-folder", methods=["POST"])
+def create_folder():
+    username = session.get("username")
+    if not username: return jsonify({"success": False})
+    name = request.json.get("name", "").strip()
+    if name and name not in users[username]["galleries"]: users[username]["galleries"][name] = []
+    return jsonify({"success": True})
+
+@app.route("/save-image", methods=["POST"])
+def save_image():
+    username = session.get("username")
+    if not username: return jsonify({"success": False})
+    data = request.json
+    folder = data.get("folder")
+    if folder in users[username]["galleries"]:
+        users[username]["galleries"][folder].append({"id": str(uuid.uuid4()), "image_b64": data.get("image_b64"), "prompt": data.get("prompt", "")})
+    return jsonify({"success": True})
+
+@app.route("/delete-image", methods=["POST"])
+def delete_image():
+    username = session.get("username")
+    if not username: return jsonify({"success": False})
+    data = request.json
+    folder, image_id = data.get("folder"), data.get("id")
+    if folder in users[username]["galleries"]:
+        users[username]["galleries"][folder] = [i for i in users[username]["galleries"][folder] if str(i["id"]) != str(image_id)]
+    return jsonify({"success": True})
+
+@app.route("/save-history", methods=["POST"])
+def save_history():
+    username = session.get("username")
+    if username and username in users:
+        users[username]["prompt_history"] = request.json.get("history", [])
+    return jsonify({"success": True})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=7860)

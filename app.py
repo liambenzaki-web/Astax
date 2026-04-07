@@ -2,17 +2,15 @@ import os
 import io
 import uuid
 import hashlib
+import urllib.parse
+import requests as req
 from flask import Flask, request, send_file, jsonify, session
-from huggingface_hub import InferenceClient
 from groq import Groq
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "astax-secret-2026")
 
-HF_TOKEN = os.environ.get("HF_TOKEN")
 GROQ_KEY = os.environ.get("GROQ_API_KEY")
-
-hf_client = InferenceClient(provider="hf-inference", api_key=HF_TOKEN)
 groq_client = Groq(api_key=GROQ_KEY)
 
 users = {}
@@ -322,14 +320,14 @@ def home():
             <button class="btn btn-ghost" id="authCancel">Annuler</button>
             <button class="btn btn-orange" id="authAction">Se connecter</button>
         </div>
-        <div class="auth-foot"><span id="authSwTxt">Pas de compte ?</span> <span class="auth-link" id="authSwLink">S'inscrire</span></div>
+        <div class="auth-foot"><span id="authSwTxt">Pas de compte ?</span> <span class="auth-link" id="authSwLink">S inscrire</span></div>
     </div>
 </div>
 <div class="overlay" id="folderOverlay">
     <div class="modal">
         <div class="modal-hdr"><h3>Nouveau dossier</h3><button class="modal-x" id="folderX">X</button></div>
         <div class="f-lbl">Nom du projet</div>
-        <input type="text" class="f-inp" id="folderName" placeholder="ex: Mes paysages fantasy">
+        <input type="text" class="f-inp" id="folderName" placeholder="ex: Mes paysages">
         <div class="modal-foot">
             <button class="btn btn-ghost" id="folderCancel">Annuler</button>
             <button class="btn btn-orange" id="folderConfirm">Creer</button>
@@ -371,7 +369,6 @@ window.addEventListener("load", function() {
         p.style.animationDelay = (Math.random() * 15) + "s";
         pc.appendChild(p);
     }
-
     try { hist = JSON.parse(localStorage.getItem("astax_h") || "[]"); } catch(e) { hist = []; }
     updateBadges();
 
@@ -448,7 +445,6 @@ window.addEventListener("load", function() {
 
     document.getElementById("saveX").addEventListener("click", function() { closeOverlay("saveOverlay"); });
     document.getElementById("saveCancel").addEventListener("click", function() { closeOverlay("saveOverlay"); });
-
     document.getElementById("userCard").addEventListener("click", userCardClick);
     document.getElementById("lightbox").addEventListener("click", function() {
         document.getElementById("lightbox").classList.remove("open");
@@ -680,8 +676,8 @@ function renderGallery(data) {
         var body = document.createElement("div"); body.className = "img-card-body";
         var pEl = document.createElement("div"); pEl.className = "img-card-prompt"; pEl.innerText = img.prompt; pEl.title = img.prompt;
         var btns = document.createElement("div"); btns.className = "img-card-btns";
-        var dlA = document.createElement("a"); dlA.href = img.image_b64; dlA.download = "astax.png"; dlA.className = "icb"; dlA.innerText = "DL"; dlA.title = "Telecharger";
-        var delB = document.createElement("button"); delB.className = "icb"; delB.innerText = "X"; delB.title = "Supprimer";
+        var dlA = document.createElement("a"); dlA.href = img.image_b64; dlA.download = "astax.png"; dlA.className = "icb"; dlA.innerText = "DL";
+        var delB = document.createElement("button"); delB.className = "icb"; delB.innerText = "X";
         var cf = currentFolder, ci = img.id;
         delB.addEventListener("click", function(e) {
             e.stopPropagation();
@@ -813,15 +809,17 @@ def chat():
     system = "Tu es un assistant creatif qui aide a creer des images avec une IA generative." + style_hint + """
 Pose des questions precises en francais, puis genere un prompt detaille en anglais.
 Regles STRICTES :
+- Reponds TOUJOURS en francais
 - UNE seule question courte a la fois
-- Maximum 3 questions
-- Avant de generer, demande : Combien d images souhaitez-vous ? (1 a 5)
-- Reponds UNIQUEMENT avec ce format exact (3 lignes, rien d autre) :
+- Maximum 3 questions avant de generer
+- Apres 3 questions maximum, genere OBLIGATOIREMENT
+- Reponds UNIQUEMENT avec ce format exact sur 3 lignes separees :
 GENERATE: [prompt anglais ultra detaille]
-COUNT: [1-5]
+COUNT: [nombre entre 1 et 5]
 MESSAGE: [phrase courte enthousiaste en francais]"""
     response = groq_client.chat.completions.create(
-        model="llama-3.3-70b-versatile", max_tokens=600,
+        model="llama-3.3-70b-versatile",
+        max_tokens=600,
         messages=[{"role": "system", "content": system}] + messages
     )
     text = response.choices[0].message.content
@@ -845,11 +843,15 @@ def generate():
     neg = data.get("negative_prompt", "")
     style = data.get("style", "")
     full = (prompt + ", " + style).strip(", ") if style else prompt
-    result = hf_client.text_to_image(full, model="stabilityai/stable-diffusion-xl-base-1.0", negative_prompt=neg or None)
-    img_io = io.BytesIO()
-    result.save(img_io, format="PNG")
-    img_io.seek(0)
-    return send_file(img_io, mimetype="image/png")
+    if neg:
+        full = full + ", avoid: " + neg
+    encoded = urllib.parse.quote(full)
+    seed = str(uuid.uuid4().int % 1000000)
+    url = "https://image.pollinations.ai/prompt/" + encoded + "?width=1024&height=1024&nologo=true&enhance=true&seed=" + seed
+    response = req.get(url, timeout=120)
+    if response.status_code != 200:
+        return jsonify({"error": "Generation failed"}), 500
+    return send_file(io.BytesIO(response.content), mimetype="image/png")
 
 @app.route("/me")
 def me():
@@ -903,7 +905,11 @@ def save_image():
     d = request.json
     folder = d.get("folder")
     if folder in users[u]["galleries"]:
-        users[u]["galleries"][folder].append({"id": str(uuid.uuid4()), "image_b64": d.get("image_b64"), "prompt": d.get("prompt", "")})
+        users[u]["galleries"][folder].append({
+            "id": str(uuid.uuid4()),
+            "image_b64": d.get("image_b64"),
+            "prompt": d.get("prompt", "")
+        })
     return jsonify({"success": True})
 
 @app.route("/delete-image", methods=["POST"])

@@ -806,23 +806,31 @@ def chat():
     messages = data.get("messages", [])
     style = data.get("style", "")
     style_hint = " Style visuel choisi : " + style + "." if style else ""
-    system = "Tu es un assistant creatif qui aide a creer des images avec une IA generative." + style_hint + """
-Pose des questions precises en francais, puis genere un prompt detaille en anglais.
-Regles STRICTES :
-- Reponds TOUJOURS en francais
-- UNE seule question courte a la fois
-- Maximum 3 questions avant de generer
-- Apres 3 questions maximum, genere OBLIGATOIREMENT
-- Reponds UNIQUEMENT avec ce format exact sur 3 lignes separees :
-GENERATE: [prompt anglais ultra detaille]
-COUNT: [nombre entre 1 et 5]
-MESSAGE: [phrase courte enthousiaste en francais]"""
+
+    system = "Tu es un assistant creatif pour generer des images avec une IA." + style_hint + """
+
+INSTRUCTIONS ABSOLUES - tu dois les suivre exactement :
+
+Tu dois TOUJOURS poser des questions avant de generer. Ne genere JAMAIS des la premiere reponse.
+
+Compte le nombre de messages de l'utilisateur dans la conversation :
+- Si c'est le 1er message : pose UNE question sur le style visuel souhaite (realiste, anime, peinture, cyberpunk...)
+- Si c'est le 2eme message : pose UNE question sur l'ambiance ou les details importants
+- Si c'est le 3eme message : demande EXACTEMENT "Combien d images souhaitez-vous generer ? (entre 1 et 5)"
+- Si c'est le 4eme message ou plus : genere OBLIGATOIREMENT avec ce format exact sur 3 lignes separees :
+GENERATE: [prompt tres detaille en anglais incluant tous les details donnes]
+COUNT: [chiffre entre 1 et 5 selon la reponse de l'utilisateur]
+MESSAGE: [message court enthousiaste en francais]
+
+IMPORTANT : Ne jamais utiliser GENERATE avant le 4eme message."""
+
     response = groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         max_tokens=600,
         messages=[{"role": "system", "content": system}] + messages
     )
     text = response.choices[0].message.content
+
     if "GENERATE:" in text:
         lines = text.split("\n")
         prompt, count, message = "", 1, "Generation en cours !"

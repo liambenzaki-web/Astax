@@ -11,6 +11,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "astax-secret-2026")
 
 GROQ_KEY = os.environ.get("GROQ_API_KEY")
+TOGETHER_KEY = os.environ.get("TOGETHER_API_KEY")
 groq_client = Groq(api_key=GROQ_KEY)
 
 users = {}
@@ -315,7 +316,7 @@ def home():
         <div class="f-lbl">Nom d'utilisateur</div>
         <input type="text" class="f-inp" id="authUser" placeholder="johndoe" autocomplete="username">
         <div class="f-lbl">Mot de passe</div>
-        <input type="password" class="f-inp" id="authPass" placeholder="••••••••" autocomplete="current-password">
+        <input type="password" class="f-inp" id="authPass" placeholder="mot de passe" autocomplete="current-password">
         <div class="modal-foot">
             <button class="btn btn-ghost" id="authCancel">Annuler</button>
             <button class="btn btn-orange" id="authAction">Se connecter</button>
@@ -351,7 +352,7 @@ var inspirePool = [
     "Une bibliotheque ancienne et magique flottant dans les nuages",
     "Un dragon de cristal endormi dans une foret lumineuse",
     "Une ville sous-marine futuriste peuplee de creatures bioluminescentes",
-    "Un titan mecanique gardant les ruines d'une cite ancienne",
+    "Un titan mecanique gardant les ruines d une cite ancienne",
     "Une foret de champignons geants sous une lune violette",
     "Un robot peintre creant une fresque dans un desert de sel",
     "Un samurai fantome dans une foret de cerisiers enneiges",
@@ -810,16 +811,15 @@ def chat():
     system = "Tu es un assistant creatif pour generer des images avec une IA." + style_hint + """
 
 INSTRUCTIONS ABSOLUES - tu dois les suivre exactement :
-
 Tu dois TOUJOURS poser des questions avant de generer. Ne genere JAMAIS des la premiere reponse.
 
-Compte le nombre de messages de l'utilisateur dans la conversation :
-- Si c'est le 1er message : pose UNE question sur le style visuel souhaite (realiste, anime, peinture, cyberpunk...)
-- Si c'est le 2eme message : pose UNE question sur l'ambiance ou les details importants
-- Si c'est le 3eme message : demande EXACTEMENT "Combien d images souhaitez-vous generer ? (entre 1 et 5)"
-- Si c'est le 4eme message ou plus : genere OBLIGATOIREMENT avec ce format exact sur 3 lignes separees :
+Compte le nombre de messages de l utilisateur dans la conversation :
+- Si c est le 1er message : pose UNE question sur le style visuel souhaite (realiste, anime, peinture, cyberpunk...)
+- Si c est le 2eme message : pose UNE question sur l ambiance ou les details importants
+- Si c est le 3eme message : demande EXACTEMENT combien d images souhaitez-vous generer entre 1 et 5
+- Si c est le 4eme message ou plus : genere OBLIGATOIREMENT avec ce format exact sur 3 lignes separees :
 GENERATE: [prompt tres detaille en anglais incluant tous les details donnes]
-COUNT: [chiffre entre 1 et 5 selon la reponse de l'utilisateur]
+COUNT: [chiffre entre 1 et 5 selon la reponse de l utilisateur]
 MESSAGE: [message court enthousiaste en francais]
 
 IMPORTANT : Ne jamais utiliser GENERATE avant le 4eme message."""
@@ -851,15 +851,34 @@ def generate():
     neg = data.get("negative_prompt", "")
     style = data.get("style", "")
     full = (prompt + ", " + style).strip(", ") if style else prompt
-    if neg:
-        full = full + ", avoid: " + neg
-    encoded = urllib.parse.quote(full)
-    seed = str(uuid.uuid4().int % 1000000)
-    url = "https://image.pollinations.ai/prompt/" + encoded + "?width=1024&height=1024&nologo=true&enhance=true&seed=" + seed + "&model=flux-pro"
-    response = req.get(url, timeout=120)
+
+    response = req.post(
+        "https://api.together.xyz/v1/images/generations",
+        headers={
+            "Authorization": "Bearer " + TOGETHER_KEY,
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": "black-forest-labs/FLUX.1-schnell-Free",
+            "prompt": full,
+            "negative_prompt": neg if neg else "",
+            "width": 1024,
+            "height": 1024,
+            "steps": 4,
+            "n": 1
+        },
+        timeout=120
+    )
+
     if response.status_code != 200:
+        print("Erreur Together:", response.text)
         return jsonify({"error": "Generation failed"}), 500
-    return send_file(io.BytesIO(response.content), mimetype="image/png")
+
+    result = response.json()
+    image_url = result["data"][0]["url"]
+
+    img_response = req.get(image_url, timeout=60)
+    return send_file(io.BytesIO(img_response.content), mimetype="image/png")
 
 @app.route("/me")
 def me():

@@ -855,7 +855,7 @@ def generate():
         full = full + ", avoid: " + neg
     encoded = urllib.parse.quote(full)
     seed = str(uuid.uuid4().int % 1000000)
-    url = "https://image.pollinations.ai/prompt/" + encoded + "?width=1024&height=1024&nologo=true&enhance=true&seed=" + seed
+    url = "https://image.pollinations.ai/prompt/" + encoded + "?width=1024&height=1024&nologo=true&enhance=true&seed=" + seed + "&model=flux-pro"
     response = req.get(url, timeout=120)
     if response.status_code != 200:
         return jsonify({"error": "Generation failed"}), 500

@@ -870,8 +870,9 @@ def generate():
         timeout=120
     )
 
+ print("Status Together:", response.status_code)
+    print("Reponse Together:", response.text[:500])
     if response.status_code != 200:
-        print("Erreur Together:", response.text)
         return jsonify({"error": "Generation failed"}), 500
 
     result = response.json()

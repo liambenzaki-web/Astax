@@ -845,6 +845,8 @@ IMPORTANT : Ne jamais utiliser GENERATE avant le 4eme message."""
     return jsonify({"type": "question", "message": text})
 
 @app.route("/generate", methods=["POST"])
+@app.route("/generate", methods=["POST"])
+@app.route("/generate", methods=["POST"])
 def generate():
     data = request.json
     prompt = data.get("prompt", "a beautiful landscape")
@@ -870,14 +872,14 @@ def generate():
         timeout=120
     )
 
- print("Status Together:", response.status_code)
+    print("Status Together:", response.status_code)
     print("Reponse Together:", response.text[:500])
+
     if response.status_code != 200:
         return jsonify({"error": "Generation failed"}), 500
 
     result = response.json()
     image_url = result["data"][0]["url"]
-
     img_response = req.get(image_url, timeout=60)
     return send_file(io.BytesIO(img_response.content), mimetype="image/png")
 
